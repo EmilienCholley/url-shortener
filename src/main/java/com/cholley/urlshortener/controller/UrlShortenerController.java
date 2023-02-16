@@ -5,6 +5,8 @@ import com.cholley.urlshortener.entity.Url;
 import com.cholley.urlshortener.service.ShortenedUrlService;
 import com.cholley.urlshortener.service.UrlService;
 import com.cholley.urlshortener.utils.Validator;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -13,7 +15,7 @@ import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 import java.util.Optional;
 
 @RestController
-@RequestMapping(value = "/url-Shortener")
+@RequestMapping(value = "/url-shortener")
 @CrossOrigin
 public class UrlShortenerController {
 
@@ -22,6 +24,9 @@ public class UrlShortenerController {
     @Autowired
     ShortenedUrlService shortenedUrlService;
 
+    Logger logger = LoggerFactory.getLogger(UrlShortenerController.class);
+
+
     /**
      * api to get the original url associated with the shortened url in param
      * @param shortenedUrl associated with an url
@@ -29,11 +34,16 @@ public class UrlShortenerController {
      */
     @GetMapping("/{shortenedUrl}")
     public ResponseEntity<String> getOriginalUrl(@PathVariable String shortenedUrl) {
+        logger.info("GET Request - getOriginalUrl : shortenedUrl=%s".formatted(shortenedUrl));
         if (Validator.isValidShortenedUrl(shortenedUrl)) {
             Optional<Url> url = urlService.getUrl(shortenedUrl);
-            return url.map(value -> ResponseEntity.ok().body(value.getUrlValue())).orElseGet(() -> ResponseEntity.noContent().build());
+
+            return url.map(value -> ResponseEntity.ok().body(value.getUrlValue()))
+                    .orElseGet(() -> ResponseEntity.noContent().build());
         }
-        return ResponseEntity.badRequest().build();
+        logger.error("GET Request - getOriginalUrl : Error: The shortened URL is not valid");
+
+        return ResponseEntity.badRequest().body("Error: The shortened URL is not valid");
     }
 
     /**
@@ -43,19 +53,25 @@ public class UrlShortenerController {
      */
     @PostMapping
     public ResponseEntity<String> shortenUrl(@RequestParam(value = "url", defaultValue = "") String url) {
+        logger.info("POST Request - shortenUrl : url=%s".formatted(url));
         if (Validator.isValidURL(url)) {
+            String result;
             if (shortenedUrlService.exists(url)) {
                 Optional<ShortenedUrl> shortenUrl = shortenedUrlService.getShortenedUrl(url);
-                return shortenUrl.map(
-                        shortenedUrl -> ResponseEntity.ok().body(ServletUriComponentsBuilder.fromCurrentContextPath().build().toUriString() + "/url-Shortener/" + shortenedUrl.getShortenedUrlValue()))
-                        .orElseGet(() -> ResponseEntity.noContent().build());
+                result = (shortenUrl.isPresent())? shortenUrl.get().getShortenedUrlValue():"";
+
             } else {
                 Optional<Url> urlObject = urlService.shortenUrl(url);
-                return urlObject.map(
-                        value -> ResponseEntity.ok().body(ServletUriComponentsBuilder.fromCurrentContextPath().build().toUriString() + "/url-shortener/" + value.getShortenedUrl()))
-                        .orElseGet(() -> ResponseEntity.noContent().build());
+                result = (urlObject.isPresent())? urlObject.get().getShortenedUrl():"";
+
             }
+            logger.info("POST Request - shortenUrl : result=%s".formatted(result));
+            return (!result.isEmpty())?ResponseEntity.ok().body("%s/url-shortener/%s".formatted(ServletUriComponentsBuilder.fromCurrentContextPath().build().toUriString(), result))
+                    :ResponseEntity.noContent().build();
         }
-        return ResponseEntity.badRequest().build();
+
+        logger.error("POST Request - shortenUrl : Error: The URL is nit valid");
+        return ResponseEntity.badRequest().body("Error : The URL is nit valid");
+
     }
 }
